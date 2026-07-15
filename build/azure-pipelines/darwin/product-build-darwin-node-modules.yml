@@ -85,6 +85,7 @@ jobs:
           done
         env:
           npm_config_arch: $(VSCODE_ARCH)
+          npm_config_cpu: $(VSCODE_ARCH)
           ELECTRON_SKIP_BINARY_DOWNLOAD: 1
           PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: 1
           GITHUB_TOKEN: "$(github-token-code-oss)"

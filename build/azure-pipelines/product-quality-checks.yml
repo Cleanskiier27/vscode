@@ -97,6 +97,7 @@ jobs:
           done
         env:
           npm_config_arch: x64
+          npm_config_cpu: x64
           VSCODE_ARCH: x64
           ELECTRON_SKIP_BINARY_DOWNLOAD: 1
           PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: 1
