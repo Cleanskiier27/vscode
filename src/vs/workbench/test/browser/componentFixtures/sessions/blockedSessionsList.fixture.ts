@@ -12,13 +12,14 @@ import { IMarkdownString, MarkdownString } from '../../../../../base/common/html
 import { mock } from '../../../../../base/test/common/mock.js';
 import { IMarkdownRendererService, MarkdownRendererService } from '../../../../../platform/markdown/browser/markdownRenderer.js';
 import { IListService, ListService } from '../../../../../platform/list/browser/listService.js';
+import { IAgentHostConnectionsService } from '../../../../../platform/agentHost/common/agentHostConnectionsService.js';
 import { IConfigurationService } from '../../../../../platform/configuration/common/configuration.js';
 import { TestConfigurationService } from '../../../../../platform/configuration/test/common/testConfigurationService.js';
 import { EditorMarkdownCodeBlockRenderer } from '../../../../../editor/browser/widget/markdownRenderer/browser/editorMarkdownCodeBlockRenderer.js';
 // eslint-disable-next-line local/code-import-patterns
 import { IChat, IGitHubInfo, ISession, ISessionChangesSummary, ISessionFileChange, ISessionFolder, ISessionGitRepository, ISessionWorkspace, SessionStatus } from '../../../../../sessions/services/sessions/common/session.js';
 // eslint-disable-next-line local/code-import-patterns
-import { IActiveSession } from '../../../../../sessions/services/sessions/common/sessionsManagement.js';
+import { IActiveSession, ISessionsManagementService } from '../../../../../sessions/services/sessions/common/sessionsManagement.js';
 // eslint-disable-next-line local/code-import-patterns
 import { ISessionsService } from '../../../../../sessions/services/sessions/browser/sessionsService.js';
 // eslint-disable-next-line local/code-import-patterns
@@ -27,6 +28,8 @@ import { ISessionsListModelService } from '../../../../../sessions/services/sess
 import { ISessionsProvidersService } from '../../../../../sessions/services/sessions/browser/sessionsProvidersService.js';
 // eslint-disable-next-line local/code-import-patterns
 import { BlockedSessionsList, registerBlockedSessionsItemActions } from '../../../../../sessions/contrib/sessions/browser/blockedSessionsList.js';
+// eslint-disable-next-line local/code-import-patterns
+import { registerBlockedSessionsHeaderActions, registerBlockedSessionsHeaderCommands } from '../../../../../sessions/contrib/sessions/browser/sessionsTitleBarWidget.js';
 // eslint-disable-next-line local/code-import-patterns
 import { ISessionCIFixModel, ISessionCIFixState } from '../../../../../sessions/contrib/sessions/browser/views/sessionsList.js';
 import { IVoicePlaybackService } from '../../../../contrib/chat/common/voicePlaybackService.js';
@@ -104,6 +107,7 @@ function createBlockedSession(options: IBlockedSessionOptions, approvals?: Map<s
 	if (options.approvalCommand !== undefined && approvals) {
 		const chatResource = URI.parse(`vscode-chat://chat/${Math.random().toString(36).slice(2)}`);
 		approvals.set(chatResource.toString(), {
+			approvalId: chatResource.toString(),
 			kind: AgentSessionApprovalKind.Terminal,
 			label: options.approvalCommand,
 			languageId: undefined,
@@ -128,6 +132,7 @@ function createBlockedSession(options: IBlockedSessionOptions, approvals?: Map<s
 		override readonly workspace: IObservable<ISessionWorkspace | undefined> = constObservable(options.workspace);
 		override readonly isArchived: IObservable<boolean> = constObservable<boolean>(false);
 		override readonly isRead: IObservable<boolean> = constObservable<boolean>(true);
+		override readonly capabilities = constObservable({ supportsMultipleChats: false, supportsDelete: true });
 		override readonly changes: IObservable<readonly ISessionFileChange[]> = constObservable<readonly ISessionFileChange[]>([]);
 		override readonly changesSummary: IObservable<ISessionChangesSummary | undefined> = constObservable<ISessionChangesSummary | undefined>(options.changesSummary);
 		override readonly description: IObservable<IMarkdownString | undefined> = constObservable<IMarkdownString | undefined>(description);
@@ -182,9 +187,7 @@ function buildCIFixScenario(specs: readonly ICIBlockedSessionOptions[]): { sessi
 function createMockListModelService(): ISessionsListModelService {
 	return new class extends mock<ISessionsListModelService>() {
 		override readonly onDidChange = Event.None;
-		override isSessionRead(): boolean { return true; }
 		override isSessionPinned(): boolean { return false; }
-		override markRead(): void { }
 		override getStatusIcon(status: SessionStatus, _isRead: boolean, isArchived: boolean, completedStateIcon?: ThemeIcon): ThemeIcon {
 			switch (status) {
 				case SessionStatus.InProgress:
@@ -233,6 +236,7 @@ function renderBlockedList(ctx: ComponentFixtureContext, sessions: readonly ISes
 			registerWorkbenchServices(reg);
 			reg.define(IListService, ListService);
 			reg.define(IMarkdownRendererService, MarkdownRendererService);
+			reg.defineInstance(IAgentHostConnectionsService, new class extends mock<IAgentHostConnectionsService>() { }());
 			// `SessionsFlatList` creates an `AgentSessionApprovalModel` (reads
 			// `IChatService.chatModels`) and observes each session through the
 			// agent-sessions model. Both are stubbed to no-ops for the fixture.
@@ -250,6 +254,9 @@ function renderBlockedList(ctx: ComponentFixtureContext, sessions: readonly ISes
 				override readonly visibleSessions: IObservable<readonly (IActiveSession | undefined)[]> = constObservable<readonly (IActiveSession | undefined)[]>([]);
 			}());
 			reg.defineInstance(ISessionsListModelService, createMockListModelService());
+			reg.defineInstance(ISessionsManagementService, new class extends mock<ISessionsManagementService>() {
+				override markRead(): Promise<void> { return Promise.resolve(); }
+			}());
 			reg.defineInstance(ISessionsProvidersService, new class extends mock<ISessionsProvidersService>() {
 				override readonly onDidChangeProviders = Event.None;
 				override getProviders() { return []; }
@@ -269,6 +276,8 @@ function renderBlockedList(ctx: ComponentFixtureContext, sessions: readonly ISes
 	(instantiationService.get(IConfigurationService) as TestConfigurationService).setUserConfiguration('editor', { fontFamily: 'monospace' });
 	instantiationService.get(IMarkdownRendererService).setDefaultCodeBlockRenderer(instantiationService.createInstance(EditorMarkdownCodeBlockRenderer));
 	disposableStore.add(registerBlockedSessionsItemActions());
+	disposableStore.add(registerBlockedSessionsHeaderCommands());
+	disposableStore.add(registerBlockedSessionsHeaderActions());
 
 	// The blocked-sessions list is shown as a floating dropdown anchored below
 	// the command center box in the agents window; approximate that surface (and
@@ -281,6 +290,9 @@ function renderBlockedList(ctx: ComponentFixtureContext, sessions: readonly ISes
 	const list = disposableStore.add(instantiationService.createInstance(BlockedSessionsList, container, {
 		onSessionOpen: () => { },
 		onIgnoreSession: () => { },
+		onShowAllSessions: () => { },
+		onIgnoreAllSessions: () => { },
+		onClose: () => { },
 		approvalModel,
 		ciFixModel,
 	}));

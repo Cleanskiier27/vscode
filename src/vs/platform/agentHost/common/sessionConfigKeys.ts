@@ -31,6 +31,16 @@ export const enum SessionConfigKey {
 	WorktreeBranchPrefix = 'worktreeBranchPrefix',
 	/** `'worktreeIncludeFiles'` — host-owned glob patterns for files copied into a new worktree. */
 	WorktreeIncludeFiles = 'worktreeIncludeFiles',
+	/** `'worktreeBranchTrack'` — host-owned branch tracking preference for programmatic session creation. */
+	WorktreeBranchTrack = 'worktreeBranchTrack',
+	/** `'worktreeCreateNewBranch'` — host-owned choice to create a branch instead of checking out the selected branch. */
+	WorktreeCreateNewBranch = 'worktreeCreateNewBranch',
+	/** `'agentMerge'` — client-owned Agent Merge enablement and session overrides. */
+	AgentMerge = 'agentMerge',
+	/** `'agentMerge.controller'` — host-owned Agent Merge lifecycle state. */
+	AgentMergeController = 'agentMerge.controller',
+	/** `'shellInitScripts'` — scripts a client generated for the session, sourced before built-in shell tool commands. */
+	ShellInitScripts = 'shellInitScripts',
 }
 
 /**
@@ -39,12 +49,9 @@ export const enum SessionConfigKey {
  * session's schema is "well-known" (and therefore handled by the dedicated
  * permission picker rather than the generic per-property fallback).
  *
- * `default` is the required baseline level; `autoApprove` is the offered
- * elevated level. `assisted` and `autopilot` are retained here purely for
- * backward/forward compatibility so a session whose schema was resolved by an
- * older or newer agent host (advertising those values) still renders the
- * dedicated picker rather than disappearing. The picker itself only ever
- * *offers* `default` / `autoApprove` (see the delegate's `availableLevels`).
+ * `default` is the required baseline level; `assisted` and `autoApprove` are
+ * offered elevated levels. `autopilot` is retained for backward compatibility
+ * with sessions created before it moved onto the mode axis.
  */
 export const KNOWN_AUTO_APPROVE_VALUES: ReadonlySet<string> = new Set(['default', 'assisted', 'autoApprove', 'autopilot']);
 
@@ -53,3 +60,13 @@ export const KNOWN_AUTO_APPROVE_VALUES: ReadonlySet<string> = new Set(['default'
  * property: the agent execution mode axis.
  */
 export const KNOWN_MODE_VALUES: ReadonlySet<string> = new Set(['interactive', 'plan', 'autopilot']);
+
+/**
+ * Removes session config that is derived from live client state and must not
+ * survive an Agent Host restart.
+ */
+export function omitTransientSessionConfigValues<T>(values: Record<string, T>): Record<string, T> {
+	const result = { ...values };
+	delete result[SessionConfigKey.ShellInitScripts];
+	return result;
+}
